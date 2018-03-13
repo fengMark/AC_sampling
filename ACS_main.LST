@@ -1,0 +1,488 @@
+C51 COMPILER V9.00   ACS_MAIN                                                              01/03/2018 22:56:00 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE ACS_MAIN
+OBJECT MODULE PLACED IN ACS_main.OBJ
+COMPILER INVOKED BY: H:\Program Files (x86)\C51\C51\BIN\C51.EXE ACS_main.c ROM(COMPACT) BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          #include <reg52.h>
+   2          #include <ZK.h>
+   3          #include<ABSACC.h>
+   4          #include<Solve.h>
+   5          #include<M12864.h>
+   6          #include<intrins.h>
+   7          #define uint unsigned int
+   8          #define uchar unsigned char
+   9          #define VOLUTAGE 1
+  10          #define CURRENT 0
+  11          #define adio (1000*10/4095)//×ª»»½øÂÊ£¬12Î»¾«¶È(2^12-1=4095)£¬ÂúÁ¿³ÌÎª10V:×ª»»Îª¿É´æ´¢µÄµçÑ¹Öµ
+  12          /*----------62256´æ´¢Æ÷µØÖ·-------------------------*/
+  13          uint code UIaddr[5]={0x0000,0x0010,0x0020,0x0030,0x0040};
+  14          uint code PQaddr[5]={0x0100,0x0110,0x0120,0x0130,0x0140}; 
+  15          uint xdata *  U_I_Data;//ÕâÀï¶¨ÒåÊÇÒ»¶¨Òª×¢ÒâÊý¾ÝÀàÐÍ£¬ÕâÀïµÄÀàÐÍÊÇÖ¸µØÖ·ÀïµÄUa,Ub,Uc,Ia,Ib,Ic
+  16          long xdata *  P_Q_Data;
+  17          /*----------8155¶Ë¿ÚºÍÃüÁî×´Ì¬¼Ä´æÆ÷µØÖ·-------------*/
+  18          #define COM8155 XBYTE[0X7f00]
+  19          #define PA8155  XBYTE[0X7f01]
+  20          #define PB8155  XBYTE[0X7f02]
+  21          #define PC8155  XBYTE[0X7f03]
+  22          #define LT8155  XBYTE[0X7F04]
+  23          #define HT8155  XBYTE[0x7f05]
+  24          /*--------------------38ÒëÂëÆ÷Ð¾Æ¬Òý½Å-----------------------*/
+  25          sbit G1 = P1^7;  
+  26          sbit G2 = P1^6;
+  27          sbit G3 = P1^5;
+  28          sbit ADSTART  = P1^4;           
+  29          sbit ADINT  = P1^3;             
+  30          sbit FREINT = P1^2;             
+  31          sbit PS2 = P1^1; 
+  32          sbit PS1 = P1^0;
+  33          /*----------------8155¶¨Ê±Æ÷µÄ¸ßµÍÎ»µÄ¼ÆÊý´ÎÊý---------------------*/
+  34          uchar HTime;
+  35          uchar LTime;
+  36          /*---------------------ÆµÂÊÖÜÆÚ-------------------------------*/
+  37          uint fre[3],real_fre;
+  38          uint x0,x1;
+  39          uchar times=0;
+  40          uchar flage;
+  41          /*--------------------µçÑ¹ºÍµçÁ÷µÄ»ù×¼Öµ-----------------------*/ 
+  42          uchar biaozhiwei;
+  43          int u,i;
+  44          /*------------------------ÏÔÊ¾Êý×é---------------------------*/
+  45          uint  disBuf_U_I[6];
+  46          long  disBuf_P_Q[2];
+  47          void config_8155_A();
+  48          void config_8155_B();
+  49          void Read62256(uchar channel);
+  50          void DisPlay_uint(uint value,uchar i);
+  51          void DisPlay_long(long value,uchar i);
+  52          void Msg(int page,uchar channel);
+  53          void TimerConfig(void);
+  54          void Outside_Init(void);
+  55          int ReadAD1674(int U_I_flag);
+C51 COMPILER V9.00   ACS_MAIN                                                              01/03/2018 22:56:00 PAGE 2   
+
+  56          void Measure_Fre(uchar s);
+  57          void Measure_U_I(uchar s);
+  58          void Acs_working(void);
+  59          uchar operate(uchar KeyValue);
+  60          /*---------------------Ö÷³ÌÐò-------------------------------------------------*/
+  61          void main(void){
+  62   1              uchar flage=1;
+  63   1              uchar choice=0;
+  64   1              ADINT=1;
+  65   1              FREINT=1;
+  66   1              config_8155_A();//Ñ¡ÖÐ12864ºÍ¼üÅÌ
+  67   1              init_lcd();
+  68   1              Clr_Scr();
+  69   1              frame();
+  70   1              hz_disp16(2, 8, yao);
+  71   1              hz_disp16(2, 40, ce);
+  72   1              hz_disp16(4, 40, di);
+  73   1              temp&=0xEF;
+  74   1              PC8155_A=temp;
+  75   1              temp|=0x20;
+  76   1              PC8155_A=temp;//Mcs = 0;Scs = 1;        
+  77   1              hz_disp16(2, 8, zhong);
+  78   1              hz_disp16(2, 40, duan);
+  79   1              hz_disp16(4, 8, lu);
+  80   1              while (flage)
+  81   1              {
+  82   2                              flage=operate(KeyBoardScan());
+  83   2              }
+  84   1      }
+  85          
+  86          /*---------------------ÅäÖÃ8155(ÍâÉè12864ºÍ¼üÅÌ)Ð¾Æ¬--------------------------*/
+  87          void config_8155_A(){
+  88   1              G1=1;
+  89   1              G2=1;
+  90   1              G3=0;
+  91   1              COM8155_A=0X0f;
+  92   1      }
+  93          /*---------------------ÅäÖÃ8155(¿ØÖÆ¶àÂ·ÇÐ»»)Ð¾Æ¬-----------------------------*/
+  94          void config_8155_B(){ //¶àÂ·ÇÐ»»
+  95   1                              G1=0;
+  96   1                              G2=0;
+  97   1                              G3=1;
+  98   1                              COM8155=0X0f;
+  99   1      }
+ 100          /*---------------------´Ó62256´æ´¢Æ÷ÖÐ²éÕÒÊý¾Ý--------------------------------*/
+ 101          void Read62256(uchar channel){
+ 102   1              uchar i;
+ 103   1              U_I_Data=(uint  *)(UIaddr[channel-1]);
+ 104   1              P_Q_Data=(long  *)(PQaddr[channel-1]);
+ 105   1              G1=1;G2=0;G3=1;//Ñ¡ÖÐ62256£¬´Ó62256ÖÐÕÒÊý¾Ý
+ 106   1              for(i=0;i<6;i++){
+ 107   2                      disBuf_U_I[i]=*U_I_Data; //È¡ÄÚÈÝ
+ 108   2                      U_I_Data++;
+ 109   2              }
+ 110   1              for(i=0;i<2;i++){
+ 111   2                      disBuf_P_Q[i]=*P_Q_Data; //È¡ÄÚÈÝ
+ 112   2                      P_Q_Data++;
+ 113   2              }
+ 114   1      }
+ 115          /*---------------------ÏÔÊ¾µçÑ¹ºÍµçÁ÷Öµ---------------------------------------*/
+ 116          void DisPlay_uint(uint value,uchar i){
+ 117   1              uchar wei;
+C51 COMPILER V9.00   ACS_MAIN                                                              01/03/2018 22:56:00 PAGE 3   
+
+ 118   1              config_8155_A();//Ñ¡ÖÐ8155À©Õ¹µÄ12864ºÍ¼üÅÌ
+ 119   1              temp&=0xEf;                                             //Mcs = 0;Scs = 1;
+ 120   1              PC8155=temp;
+ 121   1              temp|=0x20;
+ 122   1              PC8155=temp;
+ 123   1              wei=value/1000;           //ÓÒÆÁÏÔÊ¾µçÑ¹ÓÐÐ§ÖµºÍµçÁ÷ÓÐÐ§Öµ
+ 124   1              other_disp16(2*i,0,num[wei]);//¸öÎ»Êý×Ö 0.000
+ 125   1              other_disp16(2*i,8,dot);         //Ð¡Êýµã
+ 126   1              wei=value%1000/100;
+ 127   1              other_disp16(2*i,16,num[wei]);
+ 128   1              wei=value%1000%100/10;
+ 129   1              other_disp16(2*i,24,num[wei]);
+ 130   1              wei=value%1000%100%10;
+ 131   1              other_disp16(2*i,32,num[wei]);
+ 132   1      }
+ 133          /*---------------------ÏÔÊ¾ÓÐÐ§ºÍÎÞÐ§µÄ¹¦ÂÊÖµ---------------------------------*/
+ 134          void DisPlay_long(long value,uchar i){
+ 135   1              uchar wei;
+ 136   1              config_8155_A();
+ 137   1              temp|=0x10;                                             //Mcs = 1;Scs = 0;
+ 138   1              PC8155=temp;
+ 139   1              temp&=0xDf;
+ 140   1              PC8155=temp;
+ 141   1              if(value<0){                    //¸ººÅºÍÕûÊý²¿·Ö×ó±ßµÄÆÁÏÔÊ¾
+ 142   2                      other_disp16(2*(i+2),40,fuhao); 
+ 143   2              }
+ 144   1              wei=value/10000000;
+ 145   1              other_disp16(2*(i+2),48,num[wei]);
+ 146   1              wei=value%10000000/1000000;
+ 147   1              other_disp16(2*(i+2),56,num[wei]);
+ 148   1              temp&=0xEf;                                             //Mcs = 0;Scs = 1;
+ 149   1              PC8155=temp;
+ 150   1              temp|=0x20;
+ 151   1              PC8155=temp;                     //Ð¡ÊýµãºÍÐ¡Êý²¿·ÖÓÒÆÁÏÔÊ¾
+ 152   1              other_disp16(2*(i+2),0,dot);
+ 153   1              wei=value%10000000%1000000/100000;
+ 154   1              other_disp16(2*(i+2),8,num[wei]);
+ 155   1              wei=value%10000000%1000000%100000/10000;
+ 156   1              other_disp16(2*(i+2),16,num[wei]);
+ 157   1              wei=value%10000000%1000000%100000%10000/1000;
+ 158   1              other_disp16(2*(i+2),24,num[wei]);
+ 159   1              wei=value%10000000%1000000%100000%10000%1000/100;
+ 160   1              other_disp16(2*(i+2),32,num[wei]);
+ 161   1              wei=value%10000000%1000000%100000%10000%1000%100/10;
+ 162   1              other_disp16(2*(i+2),40,num[wei]);
+ 163   1              wei=value%10000000%1000000%100000%10000%1000%100%10;
+ 164   1              other_disp16(2*(i+2),48,num[wei]);
+ 165   1      }
+ 166          /*---------------------ÐÅÏ¢ÏÔÊ¾:¿ÉÓÃÐÅÏ¢ºÍÍË³öÒ³Ãæ----------------------------*/
+ 167          void Msg(int page,uchar channel){                        
+ 168   1              uchar i; 
+ 169   1              Clr_Scr();                                                                                              /
+             -/ÇåÆÁ                                                                                                  //ÏÔÊ¾±ß¿ò
+ 170   1              if(page == 0)    //ÐÅÏ¢Ò»Ò³
+ 171   1              {                                                                                                        
+             -       //ÏÔÊ¾¡°²âÊÔ¿ªÊ¼¡±
+ 172   2                      temp|=0x10;                                             //Mcs = 1;Scs = 0;
+ 173   2                      PC8155=temp;
+ 174   2                      temp&=0xDf;
+ 175   2                      PC8155=temp;
+ 176   2                      other_disp16(0, 0, dianya);
+ 177   2                      other_disp16(0, 8, zimu_a);
+C51 COMPILER V9.00   ACS_MAIN                                                              01/03/2018 22:56:00 PAGE 4   
+
+ 178   2                      other_disp16(0, 16, fenghao);
+ 179   2                      other_disp16(2, 0, dianya);
+ 180   2                      other_disp16(2, 8, zimu_b);
+ 181   2                      other_disp16(2, 16, fenghao);
+ 182   2                      other_disp16(4, 0, dianya);
+ 183   2                      other_disp16(4, 8, zimu_c);
+ 184   2                      other_disp16(4, 16, fenghao);
+ 185   2                      other_disp16(6, 0, dianliu);
+ 186   2                      other_disp16(6, 8, zimu_a);
+ 187   2                      other_disp16(6, 16, fenghao);
+ 188   2                      temp&=0xEf;                                             //Mcs = 0;Scs = 1;
+ 189   2                      PC8155=temp;
+ 190   2                      temp|=0x20;
+ 191   2                      PC8155=temp;
+ 192   2                      other_disp16(0,56, fu);
+ 193   2                      other_disp16(2,56, fu);
+ 194   2                      other_disp16(4,56, fu);
+ 195   2                      other_disp16(6,56, an);
+ 196   2                      Read62256(channel);
+ 197   2                      for(i=0;i<4;i++){
+ 198   3                              DisPlay_uint(disBuf_U_I[i],i);
+ 199   3                      }
+ 200   2              }
+ 201   1              else if(page == 1){     //ÐÅÏ¢¶þÒ³                                                                       
+             -                                        //ÏÔÊ¾¡°²âÊÔÍê±Ï¡±
+ 202   2                      temp|=0x10;
+ 203   2                      PC8155=temp;
+ 204   2                      temp&=0xDf;
+ 205   2                      PC8155=temp;
+ 206   2                      //Mcs = 1;Scs = 0;
+ 207   2                      other_disp16(0, 0, dianliu);
+ 208   2                      other_disp16(0, 8, zimu_b);
+ 209   2                      other_disp16(0, 16, fenghao);
+ 210   2                      other_disp16(2, 0, dianliu);
+ 211   2                      other_disp16(2, 8, zimu_c);
+ 212   2                      other_disp16(2, 16, fenghao);
+ 213   2                      other_disp16(4, 0, effective_P);//P
+ 214   2                      other_disp16(4, 16, fenghao);
+ 215   2                      other_disp16(6, 0, reactive_P); //Q
+ 216   2                      other_disp16(6, 16, fenghao);
+ 217   2                      temp&=0xEf;
+ 218   2                      PC8155=temp;
+ 219   2                      temp|=0x20;
+ 220   2                      PC8155=temp;
+ 221   2                      //Mcs = 0;Scs = 1;
+ 222   2                      other_disp16(0,56, an);
+ 223   2                      other_disp16(2,56, an);
+ 224   2                      other_disp16(4,56, wa);
+ 225   2                      other_disp16(6,56, wa);
+ 226   2                      for(i=4;i<6;i++){
+ 227   3                              DisPlay_uint(disBuf_U_I[i],i);
+ 228   3                      }
+ 229   2                      for(i=0;i<2;i++){
+ 230   3                              DisPlay_long(disBuf_P_Q[i],i);  
+ 231   3                      }
+ 232   2              }
+ 233   1              else if(page==2){//ÍË³öÒ³
+ 234   2                      temp|=0x10;
+ 235   2                      PC8155=temp;//Mcs = 1;Scs = 0;
+ 236   2                      temp&=0xDf;
+ 237   2                      PC8155=temp;
+ 238   2                      hz_disp16(2, 0, xie);
+C51 COMPILER V9.00   ACS_MAIN                                                              01/03/2018 22:56:00 PAGE 5   
+
+ 239   2                      hz_disp16(2, 32, xie);
+ 240   2                      temp&=0xEf;             //Mcs = 0;Scs = 1;
+ 241   2                      PC8155=temp;
+ 242   2                      temp|=0x20;
+ 243   2                      PC8155=temp;
+ 244   2                      hz_disp16(2,0, shi);
+ 245   2                      hz_disp16(2,32, yong);
+ 246   2              }
+ 247   1      }
+ 248          /*---------------------¶¨Ê±Æ÷ÉèÖÃ---------------------------------------------*/
+ 249          void TimerConfig(void){
+ 250   1              TMOD=0x01;           //Ä£Ê½ÉèÖÃ£¬00000001£¬¿É¼û²ÉÓÃµÄÊÇ¶¨Ê±Æ÷0£¬¹¤×÷ÓëÄ£Ê½1£¨M1=0£¬M0=1£©¡£
+ 251   1              TR0=1;                   //´ò¿ª¶¨Ê±Æ÷
+ 252   1              TH0=(65536-50000)/256;// ÓÉÓÚ¾§ÕñÎª12Mhz,¹ÊËù¼Ç´ÎÊýÓ¦50000£¬¼ÆÊ±Æ÷Ã¿¸ô50000Î¢Ãë·¢ÆðÒ»´ÎÖÐ¶Ï¡£
+ 253   1              TL0=(65536-50000)%256;//50000µÄÀ´Àú£¬Îª50000*11.0592/12
+ 254   1              ET0=1;                   //¿ª¶¨Ê±Æ÷0ÖÐ¶Ï
+ 255   1              EA=1;                    //¿ª×ÜÖÐ¶Ï
+ 256   1      }
+ 257          /*---------------------¶¨Ê±Æ÷ÖÐ¶Ï·þÎñ-----------------------------------------*/
+ 258          void time0(void) interrupt 1{   
+ 259   1              TH0=(65536-50000)/256;
+ 260   1              TL0=(65536-50000)%256;  
+ 261   1      }
+ 262          /*---------------------³õÊ¼»¯Íâ²¿ÖÐ¶Ï0----------------------------------------*/
+ 263          void Outside_Init(void){
+ 264   1              EX0=1; //¿ªÍâ²¿ÖÐ¶Ï0
+ 265   1              IT0=1; //ÏÂ½µÑØ´¥·¢·½Ê½
+ 266   1              EA=1;  //¿ª×ÜÖÐÏ
+ 267   1      }
+ 268          /*---------------------Íâ²¿ÖÐ¶Ï´¦Àí³ÌÐò---------------------------------------*/
+ 269          int ReadAD1674(int U_I_flag){
+ 270   1              int value;
+ 271   1              uint d;
+ 272   1              uchar H_value,L_value;
+ 273   1              if(U_I_flag==CURRENT){
+ 274   2                      G1=0;G2=1;G3=0;//Ñ¡Ôñ¸ß8Î»µçÁ÷
+ 275   2                      H_value=P0;
+ 276   2                      G1=0;G2=0;G3=1;//Ñ¡ÔñÊä³öµÍ4Î»µçÁ÷
+ 277   2                      L_value=P0;     //p0¿ÚµÍËÄÎ»
+ 278   2                      d=(H_value<<8)|(L_value<<4);//¸ßÎ»ºÍµÍÎ»ºÏ³É£¬L_valueÎªP0¿ÚµÄµÍËÄÎ»
+ 279   2              }
+ 280   1              if(U_I_flag==VOLUTAGE){
+ 281   2                      G1=0;G2=0;G3=0;//Ñ¡Ôñ¸ß8Î»µçÑ¹
+ 282   2                      H_value=P0;
+ 283   2                      G1=0;G2=0;G3=1;//Ñ¡ÔñÊä³öµÍ4Î»µçÑ¹
+ 284   2                      L_value=P0;
+ 285   2                      d=(H_value<<8)|L_value;//¸ßÎ»ºÍµÍÎ»ºÏ³É£¬temp2ÎªP0¿ÚµÄßÄ»
+ 286   2              }  
+ 287   1              d=d>>4;
+ 288   1              if((d>0x000)&&(d<0x800)){   
+ 289   2                      d=0x800-d;   
+ 290   2                      biaozhiwei=0;  
+ 291   2              }   
+ 292   1              if(d==0x000){   
+ 293   2                      d=d+2047;     
+ 294   2                      biaozhiwei=0;  
+ 295   2              }  
+ 296   1              if(d==0x800){   
+ 297   2                      d=d-0x800;    
+ 298   2                      biaozhiwei=1;  
+ 299   2              }
+ 300   1              if(d>0x800){   
+C51 COMPILER V9.00   ACS_MAIN                                                              01/03/2018 22:56:00 PAGE 6   
+
+ 301   2                      d=d-0x800;    
+ 302   2                      biaozhiwei=1;  
+ 303   2              }
+ 304   1              value=(int)(d*adio);//×ª»»Îª¿É´æ´¢µÄµçÑ¹»òÕßµçÁ÷
+ 305   1              if(biaozhiwei==0){//Îª¸ºÊýÊ±ºò
+ 306   2                      value=-value;
+ 307   2              }
+ 308   1              return value;
+ 309   1      }
+ 310          void Outside_process(void)interrupt  0{
+ 311   1              //ÅÐ¶ÏÖÐ¶ÏµÄ·½Ê½
+ 312   1              if(ADINT==0){//AD²âÁ¿ÖÐ¶Ï
+ 313   2                      if(flage==1){
+ 314   3                              ADSTART=1;//¿ªÆôÊý¾Ý²¢ÐÐÊä³ö
+ 315   3                              u=ReadAD1674(VOLUTAGE);
+ 316   3                              i=ReadAD1674(CURRENT);
+ 317   3                              flage=0;                                                        
+ 318   3                      }
+ 319   2              }
+ 320   1              if(FREINT==0){//ÆµÂÊÖÐ¶Ï
+ 321   2                      if(times==0){
+ 322   3                              x0=TH0*256+TL0;
+ 323   3                              times++;
+ 324   3                              return;
+ 325   3                      }
+ 326   2                      if(times==1){
+ 327   3                              x1=TH0*256+TL0;
+ 328   3                              times++;
+ 329   3                              return;
+ 330   3                      }
+ 331   2              }    
+ 332   1      }
+ 333          /*---------------------²âÁ¿Ò»ÌõÏßÂ·µÄÆµÂÊ-------------------------------------*/
+ 334          void Measure_Fre(uchar s){
+ 335   1              uchar i,j;
+ 336   1              uint sum=0;
+ 337   1              ADINT=1;
+ 338   1              FREINT=0;//½ÓÍ¨ÆµÂÊÖÐ¶Ï
+ 339   1              config_8155_B();//Ñ¡ÖÐ8155À©ÕÅ¿ØÖÆ¶àÂ·ÇÐ»»µÄÐ¾Æ¬£»
+ 340   1              for(i=s,j=0;i<s+3;i++,j++){
+ 341   2                      PA8155=i;       //½ÓÍ¨Ò»ÌõÏßÂ·µÄÒ»Ïà£¬Ö»²âµçÑ¹µÄÆµÂÊ£ºµçÁ÷µÄÆµÂÊºÍµçÑ¹µÄÆµÂÊÏàÍ¬
+ 342   2                      TimerConfig();//Æô¶¯¶¨Ê±Æ÷
+ 343   2                      Outside_Init();//Æô¶¯Íâ²¿ÖÐ¶Ï µ±ÓÐÍâ²¿ÖÐ¶Ï£¨ÏÂ½µÑØÐÅºÅ£©´¥·¢Á½´Î£¬Íâ²¿ÖÐ¶Ï·þÎñÖÐ¼ÇÂ¼Á½´ÎµÄÖÐ¶ÏÊ±¼ä
+ 344   2                      while(times!=2);
+ 345   2                      EX0=0;           //¹ØÍâ²¿ÖÐ¶Ï0
+ 346   2                      ET0=0;                   //¹Ø¶¨Ê±Æ÷0ÖÐ¶Ï
+ 347   2                      EA=0;                    //¹Ø×ÜÖÐ¶Ï
+ 348   2                      fre[j]=x1-x0;    //¼ÆËã³öÐÅºÅµÄÆµÂÊÖÜÆÚ
+ 349   2                      sum+=fre[j];
+ 350   2                      times=0;                 //ÂÒ»´â¿¶¼ÆÊý³õÊ¼»¯
+ 351   2              }
+ 352   1              real_fre=sum/3;//¼ÆËã³öÒ»ÌõÏßÂ·µÄÐÅºÅÆµÂÊ
+ 353   1      }
+ 354          /*---------------------²âÁ¿Ò»ÌõÏßÂ·µçÑ¹ºÍµçÁ÷£¨32µã£©-------------------------*/
+ 355          void Measure_U_I(uchar s){
+ 356   1              uchar temp;
+ 357   1              uchar j;
+ 358   1              uint Tss=((real_fre/96)-25)*16;//8155Âö³å¼ÆÊý£º¼õÈ¥25usÏàµ±ÓÚÏûºÄ25usÓÃÓÚ12Î»AD×ª»» (1/16)usÍâ²¿ÓÐÔ´¾§Õñµ
+             -ÄÊ±ÖÓÖÜÆÚ
+ 359   1              //³ËÒÔ16£ºTs/(1/16)==Âö³å¼ÆÊý´ÎÊý
+ 360   1              ADINT=0;
+ 361   1              FREINT=1;//¹Ø±ÕÆµÂÊÖÐ¶Ï,ÔÊÐíADÖÐ¶Ï
+C51 COMPILER V9.00   ACS_MAIN                                                              01/03/2018 22:56:00 PAGE 7   
+
+ 362   1              for(j=0;j<32;j++){       //Ã¿Ïà32´Î²âµçÁ÷ºÍµçÑ¹
+ 363   2             for(temp=s;temp<s+3;temp++){ //Èý´ÎÈýÏà
+ 364   3                              config_8155_B();//Ñ¡ÖÐ¶àÂ·ÇÐ»»8155
+ 365   3                              PA8155=temp;//µçÑ¹½ÓÍ¨
+ 366   3                              PB8155=temp;//µçÁ÷½ÓÍ¨
+ 367   3                              LT8155=Tss%256;//Éè¶¨¼ÆÊýµçÑ¹ÆµÂÊ50Hz ÖÜÆÚÎª0.02s£¬ËùÒÔTss´óÔ¼µÈÓÚ208.3333....Î¢Ãî ¡£8155½øÐÐ16MHz·ÖÆµ-
+             -¼ÆÊý208.333/(1/16)=3333(0d05)
+ 368   3                              HT8155=Tss/256;//ÉèÖÃÊä³ö
+ 369   3                              COM8155=0X0F|0XC0;//¿ªÆô¼ÆÊý
+ 370   3                              while(COM8155&0X40); //¼ÆÊýµ½Êý
+ 371   3                              flage=1;
+ 372   3                              ADSTART=1;//Æô¶¯AD×ª»»
+ 373   3                              while(flage);
+ 374   3                              //Ïò62256Êý¾Ý´æ´¢Æ÷ÖÐÐ´Èë¼ì²âÊý¾Ý
+ 375   3                              G1=1;G2=0;G3=1;//Ñ¡ÖÐ62256£¬Ïò62256Êý¾Ý´æ´¢Æ÷ÖÐÐ´Èë¼ì²âÊý¾Ý
+ 376   3                              if(temp==s){            //AÏà
+ 377   4                                      jacqu_volutage_arrayAA=(int xdata *)jacqu_addr[0];
+ 378   4                                      jacqu_current_arrayAA=(int xdata *)jacqu_addr[1];
+ 379   4                                      *jacqu_volutage_arrayAA=u;
+ 380   4                                      *jacqu_current_arrayAA=i;
+ 381   4                                      jacqu_volutage_arrayAA++;
+ 382   4                                      jacqu_current_arrayAA++;
+ 383   4                              }
+ 384   3                              if(temp==(s+1)){        //BÏà
+ 385   4                                      jacqu_volutage_arrayBB=(int xdata *)jacqu_addr[2];
+ 386   4                                      jacqu_current_arrayBB=(int xdata *)jacqu_addr[3];
+ 387   4                                      *jacqu_volutage_arrayBB=u;
+ 388   4                                      *jacqu_current_arrayBB=i;
+ 389   4                                      jacqu_volutage_arrayBB++;
+ 390   4                                      jacqu_current_arrayBB++;
+ 391   4                              }
+ 392   3                              if(temp==(s+2)){        //CÏà
+ 393   4                                      jacqu_volutage_arrayBB=(int xdata *)jacqu_addr[4];
+ 394   4                                      jacqu_current_arrayBB =(int xdata *)jacqu_addr[5];
+ 395   4                                      *jacqu_volutage_arrayCC=u;
+ 396   4                                      *jacqu_current_arrayCC=i;
+ 397   4                                      jacqu_volutage_arrayCC++;
+ 398   4                                      jacqu_current_arrayCC++;
+ 399   4                              }               
+ 400   3            }
+ 401   2              }
+ 402   1      }
+ 403          void Acs_working(void){
+ 404   1              uchar i,j;
+ 405   1              uchar channel=0,choice;
+ 406   1              while(1){
+ 407   2                      channel = KeyBoardScan();
+ 408   2                      if(channel>=1&&channel<=5){
+ 409   3                              break;
+ 410   3                      }
+ 411   2              }
+ 412   1              temp&=0xEF;
+ 413   1              PC8155_A=temp;
+ 414   1              temp|=0x20;
+ 415   1              PC8155_A=temp;//Mcs = 0;Scs = 1;
+ 416   1              other_disp16(4,0,num[channel]);//ÏÔÊ¾ÏßÂ·ºÅ
+ 417   1              for(i=0x08,j=0;i<0x17;i+=3,j++){
+ 418   2                      Measure_Fre(i);//²âÁ¿Ò»ÌõÏßÂ·µÄÆµÂÊ
+ 419   2                      Measure_U_I(i);//²âÁ¿Ò»ÌõÏßÂ·µÄµçÑ¹ºÍµçÁ÷
+ 420   2                      G1=1;G2=0;G3=1;//62256Ð¾Æ¬Ñ¡ÖÐ
+ 421   2                      U_I_Data=(uint  *)(UIaddr[j]);
+ 422   2                      P_Q_Data=(long  *)(PQaddr[j]);
+C51 COMPILER V9.00   ACS_MAIN                                                              01/03/2018 22:56:00 PAGE 8   
+
+ 423   2                      *U_I_Data=JiSuan_U_I(jacqu_volutage_arrayAA);U_I_Data++;                 //´æµÚj+1ÌõÏßÂ·µÄUa,Ub,Uc,Ia,Ib,Ic,P,Q
+ 424   2                      *U_I_Data=JiSuan_U_I(jacqu_volutage_arrayBB);U_I_Data++;
+ 425   2                      *U_I_Data=JiSuan_U_I(jacqu_volutage_arrayCC);U_I_Data++;
+ 426   2                      *U_I_Data=JiSuan_U_I(jacqu_current_arrayAA); U_I_Data++;
+ 427   2                      *U_I_Data=JiSuan_U_I(jacqu_current_arrayBB); U_I_Data++;
+ 428   2                      *U_I_Data=JiSuan_U_I(jacqu_current_arrayCC); U_I_Data++;
+ 429   2                      *P_Q_Data=JiSuan_P();P_Q_Data++;
+ 430   2                      *P_Q_Data=JiSuan_Q();
+ 431   2              }
+ 432   1              config_8155_A(); //ÏÔÊ¾Ö÷»ú½çÃæ
+ 433   1              Msg(0,channel);   //ÏßÂ·ÐÅÏ¢ÏÔÊ¾£ºµÚÒ»Ò³
+ 434   1              choice= KeyBoardScan();//ÏÂÒ»Ò³
+ 435   1              while(choice!=7){
+ 436   2                      choice= KeyBoardScan();
+ 437   2              }
+ 438   1              Msg(1,channel);   //ßÂÐÅÏ¢ÏÔÊ¾  µÚ¶þÒ³
+ 439   1      }
+ 440          uchar operate(uchar KeyValue){
+ 441   1              switch(KeyValue){
+ 442   2                      case(9):other_disp16(4,0,num[0]);delay(10000);Acs_working();KeyValue=6;//¿ªÊ¼
+ 443   2                      case(6):Msg(2,0);return 0;//ÍË³ö 
+ 444   2              }
+ 445   1              return 1;
+ 446   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   3300    ----
+   CONSTANT SIZE    =     20    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     45      24
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

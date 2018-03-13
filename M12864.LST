@@ -1,0 +1,308 @@
+C51 COMPILER V9.00   M12864                                                                12/29/2017 22:30:19 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE M12864
+OBJECT MODULE PLACED IN M12864.OBJ
+COMPILER INVOKED BY: H:\Program Files (x86)\C51\C51\BIN\C51.EXE M12864.c ROM(COMPACT) BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          #include <M12864.h>
+   2          #include<ABSACC.h>
+   3          uchar temp=0x00;//      PA8155_A需要临时变量
+   4          /*--------------------延时子程序------------------------------------*/
+   5          static void Delay10ms(uchar s){    //误差 0us
+   6   1              unsigned char a,b;
+   7   1              for(s=1;s>0;s--)
+   8   1                      for(b=38;b>0;b--)
+   9   1                              for(a=130;a>0;a--);
+  10   1      }
+  11          void delay(unsigned int t){
+  12   1              unsigned int i, j;
+  13   1              for (i = 0;i < t;i++)
+  14   1                      for (j = 0;j < 10;j++)
+  15   1                      {
+  16   2                             ;
+  17   2                      }
+  18   1      }
+  19          /*--------------------读忙碌子程序----------------------------------*/
+  20          void Read_busy(){
+  21   1              PA8155_A=0X00;//P0 = 0x00;
+  22   1              temp&=0XFB;//   RS = 0;
+  23   1              PC8155_A=temp;
+  24   1              temp|=0X02;//RW = 1;
+  25   1              PC8155_A=temp;
+  26   1              temp|=0X01;//E = 1;
+  27   1              PC8155_A=temp;
+  28   1              COM8155_A=0X0C;//改变PA端口的工作方式为输入
+  29   1              while(PA8155_A&0x80);
+  30   1              COM8155_A=0X0D;//改变PA端口的工作方式为输出
+  31   1              temp&=0XFE;//   E = 0;
+  32   1              PC8155_A=temp;
+  33   1      }
+  34          /*--------------------写命令到LCD-----------------------------------*/
+  35          void write_com(unsigned char cmdcode){
+  36   1              Read_busy();                    //每次读写都要判断是否忙碌
+  37   1              temp&=0XFB;//RS = 0;
+  38   1              PC8155_A=temp;
+  39   1              temp&=0XFD;//RW = 0;
+  40   1              PC8155_A=temp;
+  41   1              PA8155_A=cmdcode;//Lcd_Bus = cmdcode;
+  42   1              delay(0);
+  43   1              temp|=0X01;//E = 1;
+  44   1              PC8155_A=temp;
+  45   1              delay(0);
+  46   1              temp&=0XFE;//E = 0;
+  47   1              PC8155_A=temp;
+  48   1      }         
+  49          void write_data(unsigned char Dispdata){
+  50   1              Read_busy();                    //每次读写都要判断是否忙碌
+  51   1              temp|=0X04;//RS = 1;
+  52   1              PC8155_A=temp;
+  53   1              temp&=0XFD;//RW = 0;
+  54   1              PC8155_A=temp;
+  55   1              PA8155_A = Dispdata;
+C51 COMPILER V9.00   M12864                                                                12/29/2017 22:30:19 PAGE 2   
+
+  56   1              delay(0);
+  57   1              temp|=0X01;//E = 1;
+  58   1              PC8155_A=temp;
+  59   1              delay(0);
+  60   1              temp&=0XFE;     //E = 0;
+  61   1              PC8155_A=temp;
+  62   1      }
+  63          /*--------------------显示边框--------------------------------------*/
+  64          void frame(){
+  65   1              unsigned char i;
+  66   1              temp&=0XDF;//Mcs = 0;
+  67   1              PC8155_A=temp;                                                                                          //两个屏幕
+  68   1              temp&=0XEF;//Scs = 0;
+  69   1              PC8155_A=temp;
+  70   1      /*********************************************************************/ 
+  71   1              write_com(Page_Add + 0);                                                                //上面横线
+  72   1              write_com(Col_Add + 0);
+  73   1              for (i = 0;i < 64;i++) write_data(0x01);
+  74   1      /*********************************************************************/
+  75   1              write_com(Page_Add + 7);                                                                //下面横线
+  76   1              write_com(Col_Add + 0);
+  77   1              for (i = 0;i < 64;i++) write_data(0x80);
+  78   1      /*********************************************************************/
+  79   1              for (i = 0;i < 8;i++)
+  80   1              {
+  81   2                      temp&=0XEF;//Mcs = 0;                                                                                   //右半屏
+  82   2                      PC8155_A=temp;
+  83   2                      temp|=0X20;//Scs = 1;
+  84   2                      PC8155_A=temp;
+  85   2                      write_com(Page_Add + i);                                                        //共8页
+  86   2                      write_com(Col_Add + 63);                                                        //最后一列
+  87   2                      write_data(0xff);                                                                       //ff表示每页的8行全亮
+  88   2               
+  89   2                      temp|=0X10;//Mcs = 1;                                                                                   //左半屏与右半屏类似
+  90   2                      PC8155_A=temp;
+  91   2                      temp&=0XDF;//Scs = 0;
+  92   2                      PC8155_A=temp;
+  93   2                      write_com(Page_Add + i);
+  94   2                      write_com(Col_Add + 0);
+  95   2                      write_data(0xff); 
+  96   2              }
+  97   1      }
+  98          /*--------------------清除内存--------------------------------------*/
+  99          void Clr_Scr(){
+ 100   1              unsigned char j, k;
+ 101   1              for (k=0;k<8;k++)
+ 102   1              {
+ 103   2                      temp|=0X10;
+ 104   2                      PC8155_A=temp;
+ 105   2                      temp&=0XDF;//Mcs = 1;Scs = 0;
+ 106   2                      PC8155_A=temp;
+ 107   2                      delay(10);                                                //左半屏清屏
+ 108   2                      write_com(Page_Add + k);
+ 109   2                      write_com(Col_Add + 0);
+ 110   2                      for (j = 0;j < 64;j++) write_data(0x00);
+ 111   2              
+ 112   2                      temp&=0XEF;
+ 113   2                      PC8155_A=temp;
+ 114   2                      temp|=0X20;//Mcs = 0;Scs = 1;
+ 115   2                      PC8155_A=temp; 
+ 116   2                      delay(10);                                                //右半屏清屏
+ 117   2                      write_com(Page_Add + k);
+C51 COMPILER V9.00   M12864                                                                12/29/2017 22:30:19 PAGE 3   
+
+ 118   2                      write_com(Col_Add + 0);
+ 119   2                      for (j = 64;j < 128;j++) write_data(0x00);
+ 120   2              }          
+ 121   1      }
+ 122          ///*------------------显示12864图片---------------------------*/
+ 123          //void Disp_Img(unsigned char code *img)
+ 124          //{
+ 125          //      unsigned char j, k;
+ 126          //      for (k = 0;k < 8;k++)                                                                   //共8页
+ 127          //      {
+ 128          //              temp|=0X10;
+ 129          //              PC8155_A=temp;
+ 130          //              temp&=0XDF;
+ 131          //              PC8155_A=temp;
+ 132          //              //Mcs = 1;Scs = 0;
+ 133          //              delay(10);                                                      //左半屏数据
+ 134          //              write_com(Page_Add + k);
+ 135          //              write_com(Col_Add + 0);
+ 136          //              for (j = 0;j < 64;j++) write_data(img[k*128 + j]);      //每半块屏共64列
+ 137          //              temp&=0xEF;
+ 138          //              PC8155_A=temp;
+ 139          //              temp|=0x20;
+ 140          //              PC8155_A=temp;
+ 141          //              //Mcs = 0;Scs = 1; 
+ 142          //              delay(10);                                                      //右半屏数据
+ 143          //              write_com(Page_Add + k);
+ 144          //              write_com(Col_Add + 0);
+ 145          //              for (j = 64;j < 128;j++) write_data(img[k*128 + j]); 
+ 146          //      }
+ 147          //}
+ 148          ///*-------------------------显示横---------------------------*/
+ 149          //void Disp_H_Line()
+ 150          //{
+ 151          //      unsigned char i, j;
+ 152          //      temp&=0xEF;
+ 153          //      PC8155_A=temp;
+ 154          //      temp&=0xDF;
+ 155          //      PC8155_A=temp;
+ 156          //      //Mcs = 0;
+ 157          //      //Scs = 0;
+ 158          //      write_com(Disp_On);                                                                             //显示开
+ 159          //
+ 160          //      write_com(Page_Add);                                                                    //页地址
+ 161          //      write_com(Start_Line);                                                                  //开始行
+ 162          //      write_com(Col_Add);                                                                             //列地址
+ 163          //
+ 164          //      for (j = 0;j < 8;j++)                                                                   //共8页，所以循环8次
+ 165          //      {
+ 166          //              write_com(Page_Add + j);
+ 167          //              write_com(Col_Add + 0);                                                         //第一列开始
+ 168          //              write_com(Start_Line+0);                                                        //第一行开始
+ 169          //              for (i = 0;i < 64;i++)write_data(0x55);                         //每半屏幕共64列
+ 170          //      }
+ 171          //}
+ 172          ///*------------------------显示列-----------------------------*/
+ 173          //void Disp_V_Line()
+ 174          //{
+ 175          //      unsigned char i, j;
+ 176          //      write_com(Disp_On);                                                                             //显示开
+ 177          //      write_com(Page_Add);                                                                    //页地址
+ 178          //      write_com(Start_Line);                                                                  //列地址
+ 179          //      write_com(Col_Add);
+C51 COMPILER V9.00   M12864                                                                12/29/2017 22:30:19 PAGE 4   
+
+ 180          //
+ 181          //      for (j = 0;j < 8;j++)                                                                   //共8页
+ 182          //      {
+ 183          //              write_com(Page_Add + j);
+ 184          //              write_com(Col_Add + 0);
+ 185          //              write_com(Start_Line + 0);
+ 186          //              for (i = 0;i < 32;i++)                                                          //64列，写两次，一列空白，一列实线，所以循环32次
+ 187          //              {
+ 188          //                      write_data(0x00);                                                               //一列空
+ 189          //                      write_data(0xff);                                                               //一列实
+ 190          //              }
+ 191          //      }
+ 192          //}
+ 193          /*--------------------指定位置显示（数字，单位，符号）16*8----------*/
+ 194          void other_disp16(unsigned char pag, unsigned char col, unsigned char code *hzk){
+ 195   1              unsigned char j = 0, i = 0;
+ 196   1              for (j = 0;j < 2;j++)                                                                   //一个汉字需要占用2页，1页8行，共16行
+ 197   1              {
+ 198   2                      write_com(Page_Add + pag + j);
+ 199   2                      write_com(Col_Add + col);
+ 200   2                      for (i = 0;i < 8;i++)                                                           //16列，所以会循环16次
+ 201   2                              write_data(hzk[8*j + i]);
+ 202   2              }
+ 203   1      }
+ 204          /*--------------------指定位置显示汉字16*16-------------------------*/
+ 205          void hz_disp16(unsigned char pag, unsigned char col, unsigned char code *hzk){
+ 206   1              unsigned char j = 0, i = 0;
+ 207   1              for (j = 0;j < 2;j++)                                                                   //一个汉字需要占用2页，1页8行，共16行
+ 208   1              {
+ 209   2                      write_com(Page_Add + pag + j);
+ 210   2                      write_com(Col_Add + col);
+ 211   2                      for (i = 0;i < 16;i++)                                                          //16列，所以会循环16次
+ 212   2                              write_data(hzk[16*j + i]);
+ 213   2              }
+ 214   1      }
+ 215          /*--------------------初始化LCD屏-----------------------------------*/
+ 216          void init_lcd(){
+ 217   1              Read_busy();                                                                                    //每次读写都要判断是否忙碌
+ 218   1              temp&=0xF7;
+ 219   1              PC8155_A=temp;
+ 220   1      //      RST = 0;
+ 221   1              delay(100);
+ 222   1              temp|=0x08;
+ 223   1              PC8155_A=temp;
+ 224   1      //      RST = 1;
+ 225   1              delay(100);
+ 226   1              temp&=0xEF;
+ 227   1              PC8155_A=temp;
+ 228   1              temp&=0xDF;
+ 229   1              PC8155_A=temp;
+ 230   1              //Mcs = 0;
+ 231   1              //Scs = 0;
+ 232   1              delay(100);
+ 233   1              write_com(Disp_Off);                                                                    //关显示
+ 234   1              write_com(Page_Add + 0);
+ 235   1              write_com(Start_Line + 0);
+ 236   1              write_com(Col_Add + 0);
+ 237   1              write_com(Disp_On);
+ 238   1              return;                                                                         //开显示
+ 239   1      }
+ 240          /*--------------------行键盘扫描------------------------------------*/
+ 241          uchar  KeyBoardScan(void){
+C51 COMPILER V9.00   M12864                                                                12/29/2017 22:30:19 PAGE 5   
+
+ 242   1        uchar key;
+ 243   1        uchar temp_B;
+ 244   1        uchar i,j=0;
+ 245   1        for(i=0;i<3;i++){
+ 246   2               COM8155_A=0x0f;        //pb输出
+ 247   2               if(i==0) PB8155_A = 0xfe; //11111110
+ 248   2               if(i==1) PB8155_A = 0xfd;// 11111101
+ 249   2               if(i==2) PB8155_A = 0Xfb; //11111011
+ 250   2               COM8155_A = 0X0D; //pb输入
+ 251   2               temp_B=PB8155_A;  //pb输入读取
+ 252   2               temp_B=temp_B&0xf0;
+ 253   2               if(temp_B!=0xf0){
+ 254   3                       Delay10ms(1);
+ 255   3                       temp_B = PB8155_A;
+ 256   3                       temp_B = temp_B&0xf0;
+ 257   3                       if(temp_B!=0xf0){
+ 258   4                       switch(temp_B){
+ 259   5                              case 0xe0:{
+ 260   6                                         key = 7-i*3;
+ 261   6                              }
+ 262   5                              break;
+ 263   5                              case 0xd0:{
+ 264   6                                      key = 8-i*3;
+ 265   6                              }
+ 266   5                              break;
+ 267   5                              case 0xb0:{
+ 268   6                                      key = 9-i*3;
+ 269   6                              }
+ 270   5                              break;
+ 271   5                       }
+ 272   4                      }
+ 273   3                       return key;
+ 274   3               } 
+ 275   2        }
+ 276   1        return 10;
+ 277   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    699    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      1      13
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

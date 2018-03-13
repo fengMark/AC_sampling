@@ -1,0 +1,7 @@
+"STARTUP.obj",
+"ACS_main.obj",
+"Solve.obj",
+"M12864.obj",
+"ZK.obj" 
+TO "FINAL_ACS" 
+RAMSIZE(256) 
